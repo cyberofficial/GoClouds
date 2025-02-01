@@ -78,6 +78,11 @@ func NewGame() *Game {
 }
 
 func (g *Game) Update() error {
+	// Check for escape key to close window
+	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+		return ebiten.Termination
+	}
+
 	// Update cloud positions
 	for i := range g.clouds {
 		g.clouds[i].x += g.clouds[i].speed
@@ -314,8 +319,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		drawCloud(screen, cloud)
 	}
 
-	// Draw density information
-	ebitenutil.DebugPrint(screen, "Use Up/Down arrows to adjust cloud density")
+	// Draw density information and controls
+	ebitenutil.DebugPrint(screen, "Use Up/Down arrows to adjust cloud density\nLMB the sun to move\nPress ESC to exit")
 }
 
 func (g *Game) drawCloudShadow(screen *ebiten.Image, cloud Cloud) {
@@ -414,6 +419,8 @@ func main() {
 
 	game := NewGame()
 	if err := ebiten.RunGame(game); err != nil {
-		panic(err)
+		if err != ebiten.Termination {
+			panic(err)
+		}
 	}
 }
