@@ -33,3 +33,6 @@ go run main.go
 ```
 
 The application will open in a new window with an initial cloud density of 20%. Use the arrow keys to adjust the density to your preference.
+
+## Demo
+![Cloud Preview](./preview.gif)
