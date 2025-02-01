@@ -1,6 +1,6 @@
 # Cloud Generation App
 
-A perpetual motion cloud generation application written in Go using the Ebiten game engine.
+A perpetual motion cloud generation application written in Go using the [Ebiten](https://github.com/hajimehoshi/ebiten) game engine.
 
 ## Features
 
