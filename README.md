@@ -11,6 +11,7 @@ A perpetual motion cloud generation application written in Go using the [Ebiten]
 
 - **Up Arrow**: Increase cloud density (adds more clouds)
 - **Down Arrow**: Decrease cloud density (removes clouds)
+- **Left Mouse**: Click and drag the sun.
 - **ESC**: Exit the application
 
 ## Requirements
@@ -35,4 +36,4 @@ go run main.go
 The application will open in a new window with an initial cloud density of 20%. Use the arrow keys to adjust the density to your preference.
 
 ## Demo
-![Cloud Preview](./preview.gif)
+![Cloud Preview](./preview1.gif)
