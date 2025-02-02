@@ -654,6 +654,12 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 func (g *Game) drawCloudShadow(screen *ebiten.Image, cloud Cloud) {
 	groundHorizon := float64(screenHeight - groundHeight + groundOffset)
+
+	// Check if cloud is below the sun
+	if cloud.y < g.sunY {
+		return // Skip drawing shadow
+	}
+
 	// Calculate shadow position based on sun's position
 	shadowOffsetX := (cloud.x - g.sunX) * 0.2
 	shadowOffsetY := (cloud.y - g.sunY) * 0.3 // Increased Y offset effect
