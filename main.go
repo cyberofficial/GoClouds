@@ -32,10 +32,12 @@ type Cloud struct {
 }
 
 type Tree struct {
-	x, y  float64
-	size  float64
-	shade float64
-	shape int // 0: triangle, 1: oval, 2: circle
+	x, y          float64
+	size          float64
+	shade         float64
+	shape         int // 0: triangle, 1: oval, 2: circle
+	shadow        *ebiten.Image
+	shadowUpdated bool
 }
 
 type Menu struct {
@@ -57,6 +59,7 @@ type Game struct {
 	menu                   Menu
 	draggedTree            int // -1 when no tree is being dragged
 	dragTreeStartX         float64
+	sunMoved               bool
 }
 
 func NewGame() *Game {
@@ -75,6 +78,7 @@ func NewGame() *Game {
 			selectedTree: -1,
 			treeShadow:   1.0, // new default shadow value
 		},
+		sunMoved: true,
 	}
 
 	// Initialize clouds with random properties
@@ -93,11 +97,12 @@ func NewGame() *Game {
 		// Calculate random position within the ground area
 		baseY := float64(screenHeight-groundHeight+groundOffset) + rand.Float64()*float64(groundHeight-groundOffset)
 		g.trees[i] = Tree{
-			x:     50 + rand.Float64()*float64(screenWidth-100), // Random position with margin
-			y:     baseY,
-			size:  50 + rand.Float64()*30,   // Random size between 50-80
-			shade: 0.7 + rand.Float64()*0.3, // Random shade variation
-			shape: rand.Intn(3),             // Random shape: 0=triangle, 1=oval, 2=circle
+			x:             50 + rand.Float64()*float64(screenWidth-100), // Random position with margin
+			y:             baseY,
+			size:          50 + rand.Float64()*30,   // Random size between 50-80
+			shade:         0.7 + rand.Float64()*0.3, // Random shade variation
+			shape:         rand.Intn(3),             // Random shape: 0=triangle, 1=oval, 2=circle
+			shadowUpdated: false,
 		}
 	}
 
@@ -146,9 +151,11 @@ func (g *Game) Update() error {
 		// New: Adjust tree shadow value with S (decrease) and D (increase)
 		if inpututil.IsKeyJustPressed(ebiten.KeyS) {
 			g.menu.treeShadow = math.Max(0.2, g.menu.treeShadow-0.1)
+			g.sunMoved = true // Force shadow update
 		}
 		if inpututil.IsKeyJustPressed(ebiten.KeyD) {
 			g.menu.treeShadow = math.Min(2.0, g.menu.treeShadow+0.1)
+			g.sunMoved = true // Force shadow update
 		}
 	} else {
 		// Original density controls when menu is hidden
@@ -195,6 +202,7 @@ func (g *Game) Update() error {
 			// Keep sun within screen bounds
 			g.sunX = math.Max(sunRadius, math.Min(float64(screenWidth)-sunRadius, g.sunX))
 			g.sunY = math.Max(sunRadius, math.Min(float64(screenHeight)-groundHeight-10, g.sunY))
+			g.sunMoved = true
 		} else if g.draggedTree != -1 {
 			// Update tree position while dragging
 			newX := float64(cursorX) - g.dragTreeStartX
@@ -205,9 +213,13 @@ func (g *Game) Update() error {
 			if newY >= groundY {
 				g.trees[g.draggedTree].x = newX
 				g.trees[g.draggedTree].y = newY
+				g.trees[g.draggedTree].shadowUpdated = false
 			}
 		}
 	} else {
+		if g.isDraggingSun {
+			g.sunMoved = true // Update shadows when sun dragging ends
+		}
 		g.isDraggingSun = false
 		g.draggedTree = -1
 	}
@@ -225,18 +237,21 @@ func (g *Game) updateTreeCount() {
 	for i := range g.trees {
 		if i < len(oldTrees) {
 			g.trees[i] = oldTrees[i]
+			g.trees[i].shadowUpdated = false
 		} else {
 			// Initialize new tree with random position
 			baseY := float64(screenHeight-groundHeight+groundOffset) + rand.Float64()*float64(groundHeight-groundOffset)
 			g.trees[i] = Tree{
-				x:     50 + rand.Float64()*float64(screenWidth-100), // Random position with margin
-				y:     baseY,
-				size:  50 + rand.Float64()*30,
-				shade: 0.7 + rand.Float64()*0.3,
-				shape: rand.Intn(3), // Random shape for new trees
+				x:             50 + rand.Float64()*float64(screenWidth-100), // Random position with margin
+				y:             baseY,
+				size:          50 + rand.Float64()*30,
+				shade:         0.7 + rand.Float64()*0.3,
+				shape:         rand.Intn(3), // Random shape for new trees
+				shadowUpdated: false,
 			}
 		}
 	}
+	g.sunMoved = true
 }
 
 func min(a, b int) int {
@@ -332,7 +347,7 @@ func blendColors(base color.RGBA, lightFactor, shadowIntensity float64) color.RG
 }
 
 // --- Modify drawTree to accept the shadow factor ---
-func drawTree(screen *ebiten.Image, tree Tree, sunX, sunY, treeShadow float64) {
+func (g *Game) drawTree(screen *ebiten.Image, tree *Tree, sunX, sunY, treeShadow float64) {
 	trunkWidth := tree.size * 0.2
 	trunkHeight := tree.size * 0.4
 
@@ -361,20 +376,30 @@ func drawTree(screen *ebiten.Image, tree Tree, sunX, sunY, treeShadow float64) {
 	// Calculate shadow length and apply treeShadow factor
 	shadowLength *= treeShadow // new scaling for tree shadows
 
-	// Draw shadow with dynamic length and width
-	for i := 0.0; i < shadowLength; i++ {
-		progress := i / shadowLength
-		alpha := uint8(50 * (1 - progress))
-		shadowWidth := trunkWidth * 0.6 * (1 - progress*0.8) // Maintain some minimum width
+	// Check if shadow needs to be updated
+	if !tree.shadowUpdated || g.sunMoved {
+		tree.shadow = ebiten.NewImage(int(shadowLength*2), int(shadowLength*2)) // Create larger shadow image
+		// Draw shadow with dynamic length and width
+		for i := 0.0; i < shadowLength; i++ {
+			progress := i / shadowLength
+			alpha := uint8(50 * (1 - progress))
+			shadowWidth := trunkWidth * 0.6 * (1 - progress*0.8) // Maintain some minimum width
 
-		ebitenutil.DrawCircle(
-			screen,
-			tree.x+math.Cos(shadowAngle)*i*0.8, // Increased step size for longer shadows
-			tree.y+math.Sin(shadowAngle)*i*0.8-2,
-			shadowWidth,
-			color.RGBA{0, 0, 0, alpha},
-		)
+			ebitenutil.DrawCircle(
+				tree.shadow,
+				shadowLength+math.Cos(shadowAngle)*i*0.8,   // Center shadow image
+				shadowLength+math.Sin(shadowAngle)*i*0.8-2, // Center shadow image
+				shadowWidth,
+				color.RGBA{0, 0, 0, alpha},
+			)
+		}
+		tree.shadowUpdated = true
 	}
+
+	// Draw shadow
+	opts := &ebiten.DrawImageOptions{}
+	opts.GeoM.Translate(tree.x-shadowLength, tree.y-shadowLength) // Position shadow relative to tree
+	screen.DrawImage(tree.shadow, opts)
 
 	// Calculate lighting factor
 	lightFactor := calcTreeLighting(tree.x, tree.y, sunX, sunY)
@@ -571,15 +596,17 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 
 	// Sort trees by Y position so trees closer to bottom are drawn last (appear on top)
-	sortedTrees := make([]Tree, len(g.trees))
-	copy(sortedTrees, g.trees)
+	sortedTrees := make([]*Tree, len(g.trees))
+	for i := range g.trees {
+		sortedTrees[i] = &g.trees[i]
+	}
 	sort.Slice(sortedTrees, func(i, j int) bool {
 		return sortedTrees[i].y < sortedTrees[j].y
 	})
 
 	// Draw trees with current shadow factor
 	for _, tree := range sortedTrees {
-		drawTree(screen, tree, g.sunX, g.sunY, g.menu.treeShadow)
+		g.drawTree(screen, tree, g.sunX, g.sunY, g.menu.treeShadow)
 	}
 
 	// Draw clouds after trees
@@ -620,6 +647,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		// Draw basic controls when menu is hidden
 		ebitenutil.DebugPrint(screen, "Press M for environment controls\nLMB to drag sun/trees\nPress ESC to exit")
 	}
+
+	// Reset sunMoved flag after drawing
+	g.sunMoved = false
 }
 
 func (g *Game) drawCloudShadow(screen *ebiten.Image, cloud Cloud) {
