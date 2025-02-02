@@ -5,8 +5,6 @@ import (
 	"image/color"
 	"math"
 	"math/rand"
-	"runtime"
-	"sync"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -113,28 +111,13 @@ func (g *Game) Update() error {
 		g.menu.visible = !g.menu.visible
 	}
 
-	// Concurrently update cloud positions
-	numWorkers := runtime.NumCPU()
-	chunkSize := (len(g.clouds) + numWorkers - 1) / numWorkers
-	var wg sync.WaitGroup
-	for w := 0; w < numWorkers; w++ {
-		start := w * chunkSize
-		end := (w + 1) * chunkSize
-		if end > len(g.clouds) {
-			end = len(g.clouds)
+	// cloud positions in a single loop
+	for i := range g.clouds {
+		g.clouds[i].x += g.clouds[i].speed
+		if g.clouds[i].x > screenWidth+100 {
+			g.clouds[i].x = -100
 		}
-		wg.Add(1)
-		go func(start, end int) {
-			defer wg.Done()
-			for i := start; i < end; i++ {
-				g.clouds[i].x += g.clouds[i].speed
-				if g.clouds[i].x > screenWidth+100 {
-					g.clouds[i].x = -100
-				}
-			}
-		}(start, end)
 	}
-	wg.Wait()
 
 	// Handle menu controls when visible
 	if g.menu.visible {
