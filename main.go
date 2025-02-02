@@ -43,7 +43,8 @@ type Menu struct {
 	treeDensity  int
 	cloudCount   int
 	maxClouds    int
-	selectedTree int // -1 when no tree is selected
+	selectedTree int     // -1 when no tree is selected
+	treeShadow   float64 // new: shadow scale factor (e.g., 1.0 default)
 }
 
 type Game struct {
@@ -72,6 +73,7 @@ func NewGame() *Game {
 			cloudCount:   maxClouds,
 			maxClouds:    maxClouds,
 			selectedTree: -1,
+			treeShadow:   1.0, // new default shadow value
 		},
 	}
 
@@ -152,6 +154,14 @@ func (g *Game) Update() error {
 		}
 		if inpututil.IsKeyJustPressed(ebiten.KeyRight) {
 			g.menu.cloudCount = min(g.menu.maxClouds, g.menu.cloudCount+10)
+		}
+
+		// New: Adjust tree shadow value with S (decrease) and D (increase)
+		if inpututil.IsKeyJustPressed(ebiten.KeyS) {
+			g.menu.treeShadow = math.Max(0.2, g.menu.treeShadow-0.1)
+		}
+		if inpututil.IsKeyJustPressed(ebiten.KeyD) {
+			g.menu.treeShadow = math.Min(2.0, g.menu.treeShadow+0.1)
 		}
 	} else {
 		// Original density controls when menu is hidden
@@ -296,7 +306,8 @@ func drawGround(screen *ebiten.Image) {
 	}
 }
 
-func drawTree(screen *ebiten.Image, tree Tree, sunX, sunY float64) {
+// --- Modify drawTree to accept the shadow factor ---
+func drawTree(screen *ebiten.Image, tree Tree, sunX, sunY, treeShadow float64) {
 	trunkWidth := tree.size * 0.2
 	trunkHeight := tree.size * 0.4
 
@@ -322,6 +333,9 @@ func drawTree(screen *ebiten.Image, tree Tree, sunX, sunY float64) {
 	verticalAngleFactor := math.Abs(math.Sin(shadowAngle))
 	shadowLength *= (0.3 + 0.7*verticalAngleFactor) // Maintains minimum shadow length
 
+	// Calculate shadow length and apply treeShadow factor
+	shadowLength *= treeShadow // new scaling for tree shadows
+
 	// Draw shadow with dynamic length and width
 	for i := 0.0; i < shadowLength; i++ {
 		progress := i / shadowLength
@@ -341,6 +355,7 @@ func drawTree(screen *ebiten.Image, tree Tree, sunX, sunY float64) {
 	// Main trunk
 	ebitenutil.DrawRect(
 		screen,
+		// Main trunk
 		tree.x-trunkWidth/2,
 		tree.y-trunkHeight,
 		trunkWidth,
@@ -463,9 +478,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		g.drawCloudShadow(screen, cloud)
 	}
 
-	// Draw trees
+	// Draw trees with current shadow factor
 	for _, tree := range g.trees {
-		drawTree(screen, tree, g.sunX, g.sunY)
+		drawTree(screen, tree, g.sunX, g.sunY, g.menu.treeShadow)
 	}
 
 	// Draw clouds after trees
@@ -480,8 +495,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			screen,
 			10,
 			10,
-			220,
-			160,
+			240,
+			180,
 			color.RGBA{0, 0, 0, 180},
 		)
 
@@ -498,6 +513,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		ebitenutil.DebugPrintAt(screen, "- M: Toggle Menu", 15, y)
 		y += 20
 		ebitenutil.DebugPrintAt(screen, "- LMB: Drag Sun/Trees", 15, y)
+		y += 20
+		ebitenutil.DebugPrintAt(screen, "- S/D: Change Tree Shadow intensity", 15, y)
 		y += 20
 		ebitenutil.DebugPrintAt(screen, "- ESC: Exit", 15, y)
 	} else {
