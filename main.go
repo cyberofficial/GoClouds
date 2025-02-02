@@ -10,6 +10,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
+	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
 const (
@@ -273,13 +274,14 @@ func drawGround(screen *ebiten.Image) {
 	baseY := float64(screenHeight - groundHeight + groundOffset)
 
 	// Base ground color
-	ebitenutil.DrawRect(
+	vector.DrawFilledRect(
 		screen,
 		0,
-		baseY,
-		float64(screenWidth),
-		float64(groundHeight),
+		float32(baseY),
+		float32(screenWidth),
+		float32(groundHeight),
 		color.RGBA{34, 139, 34, 255}, // Forest green
+		false,
 	)
 
 	// Draw isometric grid
