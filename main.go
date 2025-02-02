@@ -35,6 +35,7 @@ type Tree struct {
 	x, y  float64
 	size  float64
 	shade float64
+	shape int // 0: triangle, 1: oval, 2: circle
 }
 
 type Menu struct {
@@ -95,6 +96,7 @@ func NewGame() *Game {
 			y:     baseY,
 			size:  50 + rand.Float64()*30,   // Random size between 50-80
 			shade: 0.7 + rand.Float64()*0.3, // Random shade variation
+			shape: rand.Intn(3),             // Random shape: 0=triangle, 1=oval, 2=circle
 		}
 	}
 
@@ -229,6 +231,7 @@ func (g *Game) updateTreeCount() {
 				y:     baseY,
 				size:  50 + rand.Float64()*30,
 				shade: 0.7 + rand.Float64()*0.3,
+				shape: rand.Intn(3), // Random shape for new trees
 			}
 		}
 	}
@@ -357,40 +360,94 @@ func drawTree(screen *ebiten.Image, tree Tree, sunX, sunY, treeShadow float64) {
 		color.RGBA{110, 50, 15, 255}, // Darker brown for depth
 	)
 
-	// Draw triangular tree top with 3D effect (3 segments for fuller look)
-	for i := 0; i < 3; i++ {
-		segment := float64(i)
-		segmentHeight := tree.size * 0.4
-		segmentWidth := tree.size * (1.0 - segment*0.2)
+	// Draw tree top based on shape
+	shade := uint8(tree.shade * 255)
+	baseShade := color.RGBA{0, shade, 0, 255}
+	darkShade := color.RGBA{0, uint8(float64(shade) * 0.7), 0, 255}
 
-		top := tree.y - trunkHeight - segmentHeight*(segment+1)
-		bottom := tree.y - trunkHeight - segmentHeight*segment
+	switch tree.shape {
+	case 0: // Triangle
+		for i := 0; i < 3; i++ {
+			segment := float64(i)
+			segmentHeight := tree.size * 0.4
+			segmentWidth := tree.size * (1.0 - segment*0.2)
 
-		// Draw filled triangle with gradient and side shading
-		shade := uint8(tree.shade * 255)
-		for y := bottom; y > top; y-- {
-			progress := (bottom - y) / (bottom - top)
-			width := segmentWidth * (1 - progress)
+			top := tree.y - trunkHeight - segmentHeight*(segment+1)
+			bottom := tree.y - trunkHeight - segmentHeight*segment
 
-			// Main triangle body
-			ebitenutil.DrawLine(
+			// Draw filled triangle
+			for y := bottom; y > top; y-- {
+				progress := (bottom - y) / (bottom - top)
+				width := segmentWidth * (1 - progress)
+
+				// Main triangle body
+				ebitenutil.DrawLine(
+					screen,
+					tree.x-width/2,
+					y,
+					tree.x+width/2,
+					y,
+					baseShade,
+				)
+
+				// Right side shading
+				ebitenutil.DrawLine(
+					screen,
+					tree.x+width/2,
+					y,
+					tree.x+width/2+5,
+					y+2,
+					darkShade,
+				)
+			}
+		}
+
+	case 1: // Oval
+		for i := 0; i < 3; i++ {
+			centerY := tree.y - trunkHeight - tree.size*0.4*float64(i)
+			width := tree.size * 0.7 * (1.0 - float64(i)*0.2)
+			height := tree.size * 0.4
+
+			// Draw main oval
+			ebitenutil.DrawCircle(
 				screen,
-				tree.x-width/2,
-				y,
-				tree.x+width/2,
-				y,
-				color.RGBA{0, shade, 0, 255},
+				tree.x,
+				centerY,
+				width/2,
+				baseShade,
 			)
 
-			// Right side shading for 3D effect
-			rightShade := color.RGBA{0, uint8(float64(shade) * 0.7), 0, 255}
-			ebitenutil.DrawLine(
+			// Draw highlight
+			ebitenutil.DrawCircle(
 				screen,
-				tree.x+width/2,
-				y,
-				tree.x+width/2+5,
-				y+2,
-				rightShade,
+				tree.x+width*0.2,
+				centerY-height*0.1,
+				width*0.15,
+				darkShade,
+			)
+		}
+
+	case 2: // Circle
+		for i := 0; i < 3; i++ {
+			centerY := tree.y - trunkHeight - tree.size*0.4*float64(i)
+			radius := tree.size * 0.35 * (1.0 - float64(i)*0.2)
+
+			// Main circle
+			ebitenutil.DrawCircle(
+				screen,
+				tree.x,
+				centerY,
+				radius,
+				baseShade,
+			)
+
+			// Highlight
+			ebitenutil.DrawCircle(
+				screen,
+				tree.x+radius*0.5,
+				centerY-radius*0.3,
+				radius*0.3,
+				darkShade,
 			)
 		}
 	}
