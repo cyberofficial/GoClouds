@@ -311,14 +311,20 @@ func calcTreeLighting(treeX, treeY, sunX, sunY float64) float64 {
 	return 0.4 + (0.6 * distanceFactor * (1.0 - sunHeightFactor))
 }
 
-// Update the blendColors function to include shadow intensity
+// Update the blendColors function to include shadow intensity and prevent black colors
 func blendColors(base color.RGBA, lightFactor, shadowIntensity float64) color.RGBA {
-	// Adjust lightFactor based on shadow intensity
-	adjustedLight := lightFactor * shadowIntensity
+	// Clamp light factor between 0.4 and 1.5 to prevent colors from going too dark or too bright
+	adjustedLight := math.Max(0.1, math.Min(2, lightFactor*shadowIntensity))
+
+	// Calculate new color values with clamping
+	r := uint8(math.Min(255, float64(base.R)*adjustedLight))
+	g := uint8(math.Min(255, float64(base.G)*adjustedLight))
+	b := uint8(math.Min(255, float64(base.B)*adjustedLight))
+
 	return color.RGBA{
-		uint8(float64(base.R) * adjustedLight),
-		uint8(float64(base.G) * adjustedLight),
-		uint8(float64(base.B) * adjustedLight),
+		r,
+		g,
+		b,
 		base.A,
 	}
 }
