@@ -31,7 +31,7 @@ type Cloud struct {
 }
 
 type Tree struct {
-	x     float64
+	x, y  float64
 	size  float64
 	shade float64
 }
@@ -85,10 +85,11 @@ func NewGame() *Game {
 	}
 
 	// Initialize trees with random properties
-	spacing := float64(screenWidth) / float64(numTrees+1)
 	for i := range g.trees {
+		baseY := float64(screenHeight-groundHeight+groundOffset) + treeDepth
 		g.trees[i] = Tree{
-			x:     spacing * float64(i+1),
+			x:     50 + rand.Float64()*float64(screenWidth-100), // Random position with margin
+			y:     baseY,
 			size:  50 + rand.Float64()*30,   // Random size between 50-80
 			shade: 0.7 + rand.Float64()*0.3, // Random shade variation
 		}
@@ -158,10 +159,9 @@ func (g *Game) Update() error {
 			g.dragStartY = float64(cursorY) - g.sunY
 		} else {
 			// Check for tree dragging
-			baseY := float64(screenHeight-groundHeight+groundOffset) + treeDepth
 			for i, tree := range g.trees {
 				dx := float64(cursorX) - tree.x
-				dy := float64(cursorY) - (baseY - tree.size*0.4)
+				dy := float64(cursorY) - (tree.y - tree.size*0.4)
 				if math.Abs(dx) < tree.size*0.3 && math.Abs(dy) < tree.size {
 					g.draggedTree = i
 					g.dragTreeStartX = float64(cursorX) - tree.x
@@ -183,8 +183,14 @@ func (g *Game) Update() error {
 		} else if g.draggedTree != -1 {
 			// Update tree position while dragging
 			newX := float64(cursorX) - g.dragTreeStartX
-			// Keep tree within screen bounds
-			g.trees[g.draggedTree].x = math.Max(50, math.Min(float64(screenWidth)-50, newX))
+			newY := float64(cursorY)
+			groundY := float64(screenHeight - groundHeight + groundOffset)
+
+			// Allow free movement but keep tree below ground line
+			if newY >= groundY {
+				g.trees[g.draggedTree].x = newX
+				g.trees[g.draggedTree].y = newY
+			}
 		}
 	} else {
 		g.isDraggingSun = false
@@ -204,10 +210,11 @@ func (g *Game) updateTreeCount() {
 		if i < len(oldTrees) {
 			g.trees[i] = oldTrees[i]
 		} else {
-			// Initialize new tree
-			spacing := float64(screenWidth) / float64(len(g.trees)+1)
+			// Initialize new tree with random position
+			baseY := float64(screenHeight-groundHeight+groundOffset) + treeDepth
 			g.trees[i] = Tree{
-				x:     spacing * float64(i+1),
+				x:     50 + rand.Float64()*float64(screenWidth-100), // Random position with margin
+				y:     baseY,
 				size:  50 + rand.Float64()*30,
 				shade: 0.7 + rand.Float64()*0.3,
 			}
@@ -274,17 +281,16 @@ func drawGround(screen *ebiten.Image) {
 func drawTree(screen *ebiten.Image, tree Tree, sunX, sunY float64) {
 	trunkWidth := tree.size * 0.2
 	trunkHeight := tree.size * 0.4
-	baseY := float64(screenHeight-groundHeight+groundOffset) + treeDepth // Move trees down into the ground
 
 	// Draw tree shadow
 	shadowLength := tree.size * 0.5
-	shadowAngle := math.Atan2(baseY-sunY, tree.x-sunX) // Calculate shadow angle based on sun position
+	shadowAngle := math.Atan2(tree.y-sunY, tree.x-sunX) // Calculate shadow angle based on sun position
 	for i := 0.0; i < shadowLength; i++ {
 		alpha := uint8(40 * (1 - i/shadowLength))
 		ebitenutil.DrawCircle(
 			screen,
 			tree.x+math.Cos(shadowAngle)*i*0.5,
-			baseY+math.Sin(shadowAngle)*i*0.5-2,
+			tree.y+math.Sin(shadowAngle)*i*0.5-2,
 			trunkWidth*0.6*(1-i/shadowLength),
 			color.RGBA{0, 0, 0, alpha},
 		)
@@ -295,7 +301,7 @@ func drawTree(screen *ebiten.Image, tree Tree, sunX, sunY float64) {
 	ebitenutil.DrawRect(
 		screen,
 		tree.x-trunkWidth/2,
-		baseY-trunkHeight,
+		tree.y-trunkHeight,
 		trunkWidth,
 		trunkHeight,
 		color.RGBA{139, 69, 19, 255}, // Brown
@@ -305,7 +311,7 @@ func drawTree(screen *ebiten.Image, tree Tree, sunX, sunY float64) {
 	ebitenutil.DrawRect(
 		screen,
 		tree.x+trunkWidth/2-2,
-		baseY-trunkHeight,
+		tree.y-trunkHeight,
 		4,
 		trunkHeight,
 		color.RGBA{110, 50, 15, 255}, // Darker brown for depth
@@ -317,8 +323,8 @@ func drawTree(screen *ebiten.Image, tree Tree, sunX, sunY float64) {
 		segmentHeight := tree.size * 0.4
 		segmentWidth := tree.size * (1.0 - segment*0.2)
 
-		top := baseY - trunkHeight - segmentHeight*(segment+1)
-		bottom := baseY - trunkHeight - segmentHeight*segment
+		top := tree.y - trunkHeight - segmentHeight*(segment+1)
+		bottom := tree.y - trunkHeight - segmentHeight*segment
 
 		// Draw filled triangle with gradient and side shading
 		shade := uint8(tree.shade * 255)
