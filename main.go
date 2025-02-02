@@ -64,8 +64,8 @@ func NewGame() *Game {
 		clouds:      make([]Cloud, maxClouds),
 		trees:       make([]Tree, numTrees),
 		density:     0.2, // Start with 20% density
-		sunX:        float64(screenWidth - 100),
-		sunY:        float64(80),
+		sunX:        float64(screenWidth / 2),
+		sunY:        float64(screenHeight - groundHeight - 10),
 		draggedTree: -1,
 		menu: Menu{
 			visible:      false,
@@ -194,7 +194,7 @@ func (g *Game) Update() error {
 
 			// Keep sun within screen bounds
 			g.sunX = math.Max(sunRadius, math.Min(float64(screenWidth)-sunRadius, g.sunX))
-			g.sunY = math.Max(sunRadius, math.Min(float64(screenHeight)*0.5, g.sunY))
+			g.sunY = math.Max(sunRadius, math.Min(float64(screenHeight)-groundHeight-10, g.sunY))
 		} else if g.draggedTree != -1 {
 			// Update tree position while dragging
 			newX := float64(cursorX) - g.dragTreeStartX
@@ -212,6 +212,7 @@ func (g *Game) Update() error {
 		g.draggedTree = -1
 	}
 
+	fmt.Printf("FPS: %0.2f\n", ebiten.CurrentFPS())
 	return nil
 }
 
