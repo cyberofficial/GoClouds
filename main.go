@@ -293,6 +293,36 @@ func drawGround(screen *ebiten.Image) {
 	}
 }
 
+// Add these helper functions before drawTree
+func calcTreeLighting(treeX, treeY, sunX, sunY float64) float64 {
+	// Calculate distance to sun
+	dx := treeX - sunX
+	dy := treeY - sunY
+	distanceToSun := math.Sqrt(dx*dx + dy*dy)
+	maxDistance := math.Sqrt(float64(screenWidth*screenWidth + screenHeight*screenHeight))
+
+	// Light factor based on distance (closer = brighter)
+	distanceFactor := 1.0 - (distanceToSun / maxDistance)
+
+	// Light factor based on sun height (lower sun = darker)
+	sunHeightFactor := sunY / float64(screenHeight)
+
+	// Combine factors
+	return 0.4 + (0.6 * distanceFactor * (1.0 - sunHeightFactor))
+}
+
+// Update the blendColors function to include shadow intensity
+func blendColors(base color.RGBA, lightFactor, shadowIntensity float64) color.RGBA {
+	// Adjust lightFactor based on shadow intensity
+	adjustedLight := lightFactor * shadowIntensity
+	return color.RGBA{
+		uint8(float64(base.R) * adjustedLight),
+		uint8(float64(base.G) * adjustedLight),
+		uint8(float64(base.B) * adjustedLight),
+		base.A,
+	}
+}
+
 // --- Modify drawTree to accept the shadow factor ---
 func drawTree(screen *ebiten.Image, tree Tree, sunX, sunY, treeShadow float64) {
 	trunkWidth := tree.size * 0.2
@@ -338,16 +368,25 @@ func drawTree(screen *ebiten.Image, tree Tree, sunX, sunY, treeShadow float64) {
 		)
 	}
 
-	// Draw trunk with 3D effect
-	// Main trunk
+	// Calculate lighting factor
+	lightFactor := calcTreeLighting(tree.x, tree.y, sunX, sunY)
+
+	// Base colors
+	baseTrunkColor := color.RGBA{139, 69, 19, 255} // Brown
+	darkTrunkColor := color.RGBA{110, 50, 15, 255} // Darker brown
+
+	// Apply lighting to trunk colors with shadow intensity
+	litTrunkColor := blendColors(baseTrunkColor, lightFactor, treeShadow)
+	litDarkTrunkColor := blendColors(darkTrunkColor, lightFactor, treeShadow)
+
+	// Draw trunk with lighting
 	ebitenutil.DrawRect(
 		screen,
-		// Main trunk
 		tree.x-trunkWidth/2,
 		tree.y-trunkHeight,
 		trunkWidth,
 		trunkHeight,
-		color.RGBA{139, 69, 19, 255}, // Brown
+		litTrunkColor,
 	)
 
 	// Trunk right shading
@@ -357,14 +396,18 @@ func drawTree(screen *ebiten.Image, tree Tree, sunX, sunY, treeShadow float64) {
 		tree.y-trunkHeight,
 		4,
 		trunkHeight,
-		color.RGBA{110, 50, 15, 255}, // Darker brown for depth
+		litDarkTrunkColor,
 	)
 
-	// Draw tree top based on shape
+	// Calculate leaf colors with lighting and shadow intensity
 	shade := uint8(tree.shade * 255)
-	baseShade := color.RGBA{0, shade, 0, 255}
-	darkShade := color.RGBA{0, uint8(float64(shade) * 0.7), 0, 255}
+	baseGreen := color.RGBA{0, shade, 0, 255}
+	darkGreen := color.RGBA{0, uint8(float64(shade) * 0.7), 0, 255}
 
+	litBaseGreen := blendColors(baseGreen, lightFactor, treeShadow)
+	litDarkGreen := blendColors(darkGreen, lightFactor, treeShadow)
+
+	// Draw tree top based on shape
 	switch tree.shape {
 	case 0: // Triangle
 		for i := 0; i < 3; i++ {
@@ -387,7 +430,7 @@ func drawTree(screen *ebiten.Image, tree Tree, sunX, sunY, treeShadow float64) {
 					y,
 					tree.x+width/2,
 					y,
-					baseShade,
+					litBaseGreen,
 				)
 
 				// Right side shading
@@ -397,7 +440,7 @@ func drawTree(screen *ebiten.Image, tree Tree, sunX, sunY, treeShadow float64) {
 					y,
 					tree.x+width/2+5,
 					y+2,
-					darkShade,
+					litDarkGreen,
 				)
 			}
 		}
@@ -408,22 +451,22 @@ func drawTree(screen *ebiten.Image, tree Tree, sunX, sunY, treeShadow float64) {
 			width := tree.size * 0.7 * (1.0 - float64(i)*0.2)
 			height := tree.size * 0.4
 
-			// Draw main oval
+			// Draw main oval with lighting
 			ebitenutil.DrawCircle(
 				screen,
 				tree.x,
 				centerY,
 				width/2,
-				baseShade,
+				litBaseGreen,
 			)
 
-			// Draw highlight
+			// Draw highlight with lighting
 			ebitenutil.DrawCircle(
 				screen,
 				tree.x+width*0.2,
 				centerY-height*0.1,
 				width*0.15,
-				darkShade,
+				litDarkGreen,
 			)
 		}
 
@@ -432,22 +475,22 @@ func drawTree(screen *ebiten.Image, tree Tree, sunX, sunY, treeShadow float64) {
 			centerY := tree.y - trunkHeight - tree.size*0.4*float64(i)
 			radius := tree.size * 0.35 * (1.0 - float64(i)*0.2)
 
-			// Main circle
+			// Main circle with lighting
 			ebitenutil.DrawCircle(
 				screen,
 				tree.x,
 				centerY,
 				radius,
-				baseShade,
+				litBaseGreen,
 			)
 
-			// Highlight
+			// Highlight with lighting
 			ebitenutil.DrawCircle(
 				screen,
 				tree.x+radius*0.5,
 				centerY-radius*0.3,
 				radius*0.3,
-				darkShade,
+				litDarkGreen,
 			)
 		}
 	}
@@ -562,7 +605,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		y += 20
 		ebitenutil.DebugPrintAt(screen, "- LMB: Drag Sun/Trees", 15, y)
 		y += 20
-		ebitenutil.DebugPrintAt(screen, "- S/D: Change Tree Shadow intensity", 15, y)
+		ebitenutil.DebugPrintAt(screen, "- S/D: Change Tree Light/Shadow intensity", 15, y)
 		y += 20
 		ebitenutil.DebugPrintAt(screen, "- ESC: Exit", 15, y)
 	} else {
