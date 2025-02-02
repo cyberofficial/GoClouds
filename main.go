@@ -90,7 +90,8 @@ func NewGame() *Game {
 
 	// Initialize trees with random properties
 	for i := range g.trees {
-		baseY := float64(screenHeight-groundHeight+groundOffset) + treeDepth
+		// Calculate random position within the ground area
+		baseY := float64(screenHeight-groundHeight+groundOffset) + rand.Float64()*float64(groundHeight-groundOffset)
 		g.trees[i] = Tree{
 			x:     50 + rand.Float64()*float64(screenWidth-100), // Random position with margin
 			y:     baseY,
@@ -225,7 +226,7 @@ func (g *Game) updateTreeCount() {
 			g.trees[i] = oldTrees[i]
 		} else {
 			// Initialize new tree with random position
-			baseY := float64(screenHeight-groundHeight+groundOffset) + treeDepth
+			baseY := float64(screenHeight-groundHeight+groundOffset) + rand.Float64()*float64(groundHeight-groundOffset)
 			g.trees[i] = Tree{
 				x:     50 + rand.Float64()*float64(screenWidth-100), // Random position with margin
 				y:     baseY,
