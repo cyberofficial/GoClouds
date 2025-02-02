@@ -5,14 +5,26 @@ A perpetual motion cloud generation application written in Go using the [Ebiten]
 ## Features
 
 - Dynamic cloud density control
-- """"Realistic"""" cloud rendering with varying sizes and opacity levels
+- "Realistic" cloud rendering with varying sizes and opacity levels
+- Adjustable tree density and shadow intensity
 
 ## Controls
 
-- **Up Arrow**: Increase cloud density (adds more clouds)
-- **Down Arrow**: Decrease cloud density (removes clouds)
-- **Left Mouse**: Click and drag the sun.
+- **M**: Toggle Environment Controls
+- **LMB**: Drag Sun or Trees
 - **ESC**: Exit the application
+
+When environment controls are active:
+- **Up Arrow**: Increase tree density
+- **Down Arrow**: Decrease tree density
+- **Left Arrow**: Decrease cloud count
+- **Right Arrow**: Increase cloud count
+- **S**: Decrease tree shadow intensity
+- **D**: Increase tree shadow intensity
+
+When environment controls are hidden:
+- **Up Arrow**: Increase cloud density
+- **Down Arrow**: Decrease cloud density
 
 ## Requirements
 
