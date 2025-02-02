@@ -160,9 +160,10 @@ func (g *Game) Update() error {
 		} else {
 			// Check for tree dragging
 			for i, tree := range g.trees {
+				// Expand hitbox to include both trunk and tree crown
 				dx := float64(cursorX) - tree.x
-				dy := float64(cursorY) - (tree.y - tree.size*0.4)
-				if math.Abs(dx) < tree.size*0.3 && math.Abs(dy) < tree.size {
+				crownTop := tree.y - tree.size*1.2 // Account for full tree height
+				if math.Abs(dx) < tree.size*0.4 && float64(cursorY) >= crownTop && float64(cursorY) <= tree.y {
 					g.draggedTree = i
 					g.dragTreeStartX = float64(cursorX) - tree.x
 					break
@@ -282,16 +283,39 @@ func drawTree(screen *ebiten.Image, tree Tree, sunX, sunY float64) {
 	trunkWidth := tree.size * 0.2
 	trunkHeight := tree.size * 0.4
 
-	// Draw tree shadow
-	shadowLength := tree.size * 0.5
-	shadowAngle := math.Atan2(tree.y-sunY, tree.x-sunX) // Calculate shadow angle based on sun position
+	// Calculate distance and angle to sun
+	dx := tree.x - sunX
+	dy := tree.y - sunY
+	distanceToSun := math.Sqrt(dx*dx + dy*dy)
+	shadowAngle := math.Atan2(tree.y-sunY, tree.x-sunX)
+
+	// Calculate distance factor (shadows get longer when sun is closer)
+	maxDistance := math.Sqrt(float64(screenWidth*screenWidth + screenHeight*screenHeight))
+	distanceFactor := math.Max(0.5, 1.0-distanceToSun/maxDistance) * 2.0
+
+	// Calculate shadow length based on sun height and distance
+	sunHeight := screenHeight - sunY
+	heightFactor := math.Max(0.2, sunHeight/screenHeight) // Prevents extremely short shadows when sun is at bottom
+	baseShadowLength := tree.size * 2.0                   // Base shadow length
+
+	// Shadow gets longer as sun gets lower and closer to horizon
+	shadowLength := baseShadowLength * (1 / heightFactor) * distanceFactor
+
+	// Shadow gets shorter when sun is directly overhead
+	verticalAngleFactor := math.Abs(math.Sin(shadowAngle))
+	shadowLength *= (0.3 + 0.7*verticalAngleFactor) // Maintains minimum shadow length
+
+	// Draw shadow with dynamic length and width
 	for i := 0.0; i < shadowLength; i++ {
-		alpha := uint8(40 * (1 - i/shadowLength))
+		progress := i / shadowLength
+		alpha := uint8(50 * (1 - progress))
+		shadowWidth := trunkWidth * 0.6 * (1 - progress*0.8) // Maintain some minimum width
+
 		ebitenutil.DrawCircle(
 			screen,
-			tree.x+math.Cos(shadowAngle)*i*0.5,
-			tree.y+math.Sin(shadowAngle)*i*0.5-2,
-			trunkWidth*0.6*(1-i/shadowLength),
+			tree.x+math.Cos(shadowAngle)*i*0.8, // Increased step size for longer shadows
+			tree.y+math.Sin(shadowAngle)*i*0.8-2,
+			shadowWidth,
 			color.RGBA{0, 0, 0, alpha},
 		)
 	}
