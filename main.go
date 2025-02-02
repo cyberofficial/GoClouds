@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"math"
 	"math/rand"
+	"sort"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -461,8 +462,15 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		g.drawCloudShadow(screen, cloud)
 	}
 
+	// Sort trees by Y position so trees closer to bottom are drawn last (appear on top)
+	sortedTrees := make([]Tree, len(g.trees))
+	copy(sortedTrees, g.trees)
+	sort.Slice(sortedTrees, func(i, j int) bool {
+		return sortedTrees[i].y < sortedTrees[j].y
+	})
+
 	// Draw trees with current shadow factor
-	for _, tree := range g.trees {
+	for _, tree := range sortedTrees {
 		drawTree(screen, tree, g.sunX, g.sunY, g.menu.treeShadow)
 	}
 
