@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image/color"
 	"math"
 	"math/rand"
@@ -35,6 +36,14 @@ type Tree struct {
 	shade float64
 }
 
+type Menu struct {
+	visible      bool
+	treeDensity  int
+	cloudCount   int
+	maxClouds    int
+	selectedTree int // -1 when no tree is selected
+}
+
 type Game struct {
 	clouds                 []Cloud
 	trees                  []Tree
@@ -42,15 +51,26 @@ type Game struct {
 	sunX, sunY             float64
 	isDraggingSun          bool
 	dragStartX, dragStartY float64
+	menu                   Menu
+	draggedTree            int // -1 when no tree is being dragged
+	dragTreeStartX         float64
 }
 
 func NewGame() *Game {
 	g := &Game{
-		clouds:  make([]Cloud, maxClouds),
-		trees:   make([]Tree, numTrees),
-		density: 0.2, // Start with 20% density
-		sunX:    float64(screenWidth - 100),
-		sunY:    float64(80),
+		clouds:      make([]Cloud, maxClouds),
+		trees:       make([]Tree, numTrees),
+		density:     0.2, // Start with 20% density
+		sunX:        float64(screenWidth - 100),
+		sunY:        float64(80),
+		draggedTree: -1,
+		menu: Menu{
+			visible:      false,
+			treeDensity:  numTrees,
+			cloudCount:   maxClouds,
+			maxClouds:    maxClouds,
+			selectedTree: -1,
+		},
 	}
 
 	// Initialize clouds with random properties
@@ -83,6 +103,11 @@ func (g *Game) Update() error {
 		return ebiten.Termination
 	}
 
+	// Toggle menu with M key
+	if inpututil.IsKeyJustPressed(ebiten.KeyM) {
+		g.menu.visible = !g.menu.visible
+	}
+
 	// Update cloud positions
 	for i := range g.clouds {
 		g.clouds[i].x += g.clouds[i].speed
@@ -91,40 +116,117 @@ func (g *Game) Update() error {
 		}
 	}
 
-	// Adjust density with up/down arrows
-	if inpututil.IsKeyJustPressed(ebiten.KeyUp) {
-		g.density = math.Min(1.0, g.density+0.1)
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyDown) {
-		g.density = math.Max(0.0, g.density-0.1)
+	// Handle menu controls when visible
+	if g.menu.visible {
+		// Adjust tree density with up/down arrows
+		if inpututil.IsKeyJustPressed(ebiten.KeyUp) {
+			g.menu.treeDensity = min(20, g.menu.treeDensity+1)
+			g.updateTreeCount()
+		}
+		if inpututil.IsKeyJustPressed(ebiten.KeyDown) {
+			g.menu.treeDensity = max(1, g.menu.treeDensity-1)
+			g.updateTreeCount()
+		}
+
+		// Adjust cloud count with left/right arrows
+		if inpututil.IsKeyJustPressed(ebiten.KeyLeft) {
+			g.menu.cloudCount = max(0, g.menu.cloudCount-10)
+		}
+		if inpututil.IsKeyJustPressed(ebiten.KeyRight) {
+			g.menu.cloudCount = min(g.menu.maxClouds, g.menu.cloudCount+10)
+		}
+	} else {
+		// Original density controls when menu is hidden
+		if inpututil.IsKeyJustPressed(ebiten.KeyUp) {
+			g.density = math.Min(1.0, g.density+0.1)
+		}
+		if inpututil.IsKeyJustPressed(ebiten.KeyDown) {
+			g.density = math.Max(0.0, g.density-0.1)
+		}
 	}
 
-	// Handle sun dragging
 	cursorX, cursorY := ebiten.CursorPosition()
+
+	// Handle mouse input
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-		// Check if click is within sun bounds
+		// Check for sun dragging first
 		dx := float64(cursorX) - g.sunX
 		dy := float64(cursorY) - g.sunY
 		if dx*dx+dy*dy <= sunRadius*sunRadius {
 			g.isDraggingSun = true
 			g.dragStartX = float64(cursorX) - g.sunX
 			g.dragStartY = float64(cursorY) - g.sunY
+		} else {
+			// Check for tree dragging
+			baseY := float64(screenHeight-groundHeight+groundOffset) + treeDepth
+			for i, tree := range g.trees {
+				dx := float64(cursorX) - tree.x
+				dy := float64(cursorY) - (baseY - tree.size*0.4)
+				if math.Abs(dx) < tree.size*0.3 && math.Abs(dy) < tree.size {
+					g.draggedTree = i
+					g.dragTreeStartX = float64(cursorX) - tree.x
+					break
+				}
+			}
 		}
 	}
 
-	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) && g.isDraggingSun {
-		// Update sun position while dragging
-		g.sunX = float64(cursorX) - g.dragStartX
-		g.sunY = float64(cursorY) - g.dragStartY
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+		if g.isDraggingSun {
+			// Update sun position while dragging
+			g.sunX = float64(cursorX) - g.dragStartX
+			g.sunY = float64(cursorY) - g.dragStartY
 
-		// Keep sun within screen bounds
-		g.sunX = math.Max(sunRadius, math.Min(float64(screenWidth)-sunRadius, g.sunX))
-		g.sunY = math.Max(sunRadius, math.Min(float64(screenHeight)*0.5, g.sunY))
+			// Keep sun within screen bounds
+			g.sunX = math.Max(sunRadius, math.Min(float64(screenWidth)-sunRadius, g.sunX))
+			g.sunY = math.Max(sunRadius, math.Min(float64(screenHeight)*0.5, g.sunY))
+		} else if g.draggedTree != -1 {
+			// Update tree position while dragging
+			newX := float64(cursorX) - g.dragTreeStartX
+			// Keep tree within screen bounds
+			g.trees[g.draggedTree].x = math.Max(50, math.Min(float64(screenWidth)-50, newX))
+		}
 	} else {
 		g.isDraggingSun = false
+		g.draggedTree = -1
 	}
 
 	return nil
+}
+
+func (g *Game) updateTreeCount() {
+	// Update tree count based on density setting
+	oldTrees := g.trees
+	g.trees = make([]Tree, g.menu.treeDensity)
+
+	// Keep existing trees if possible
+	for i := range g.trees {
+		if i < len(oldTrees) {
+			g.trees[i] = oldTrees[i]
+		} else {
+			// Initialize new tree
+			spacing := float64(screenWidth) / float64(len(g.trees)+1)
+			g.trees[i] = Tree{
+				x:     spacing * float64(i+1),
+				size:  50 + rand.Float64()*30,
+				shade: 0.7 + rand.Float64()*0.3,
+			}
+		}
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func drawGround(screen *ebiten.Image) {
@@ -302,8 +404,14 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	drawGround(screen)
 
 	// Draw cloud shadows first
-	activeClouds := int(math.Floor(g.density * float64(len(g.clouds))))
-	for i := 0; i < activeClouds; i++ {
+	var activeClouds int
+	if g.menu.visible {
+		activeClouds = g.menu.cloudCount
+	} else {
+		activeClouds = int(math.Floor(g.density * float64(len(g.clouds))))
+	}
+
+	for i := 0; i < activeClouds && i < len(g.clouds); i++ {
 		cloud := g.clouds[i]
 		g.drawCloudShadow(screen, cloud)
 	}
@@ -314,13 +422,41 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 
 	// Draw clouds after trees
-	for i := 0; i < activeClouds; i++ {
+	for i := 0; i < activeClouds && i < len(g.clouds); i++ {
 		cloud := g.clouds[i]
-		drawCloud(screen, cloud)
+		g.drawCloud(screen, cloud)
 	}
 
-	// Draw density information and controls
-	ebitenutil.DebugPrint(screen, "Use Up/Down arrows to adjust cloud density\nLMB the sun to move\nPress ESC to exit")
+	if g.menu.visible {
+		// Draw semi-transparent overlay
+		ebitenutil.DrawRect(
+			screen,
+			10,
+			10,
+			220,
+			160,
+			color.RGBA{0, 0, 0, 180},
+		)
+
+		// Draw menu content
+		y := 20
+		ebitenutil.DebugPrintAt(screen, "=== Environment Controls ===", 15, y)
+		y += 20
+		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("Tree Count: %d (Up/Down)", g.menu.treeDensity), 15, y)
+		y += 20
+		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("Cloud Count: %d (Left/Right)", g.menu.cloudCount), 15, y)
+		y += 20
+		ebitenutil.DebugPrintAt(screen, "Controls:", 15, y)
+		y += 20
+		ebitenutil.DebugPrintAt(screen, "- M: Toggle Menu", 15, y)
+		y += 20
+		ebitenutil.DebugPrintAt(screen, "- LMB: Drag Sun/Trees", 15, y)
+		y += 20
+		ebitenutil.DebugPrintAt(screen, "- ESC: Exit", 15, y)
+	} else {
+		// Draw basic controls when menu is hidden
+		ebitenutil.DebugPrint(screen, "Press M for environment controls\nLMB to drag sun/trees\nPress ESC to exit")
+	}
 }
 
 func (g *Game) drawCloudShadow(screen *ebiten.Image, cloud Cloud) {
@@ -386,7 +522,17 @@ func (g *Game) drawCloudShadow(screen *ebiten.Image, cloud Cloud) {
 	}
 }
 
-func drawCloud(screen *ebiten.Image, cloud Cloud) {
+func (g *Game) drawCloud(screen *ebiten.Image, cloud Cloud) {
+	// Calculate distance from sun to cloud
+	dx := cloud.x - g.sunX
+	dy := cloud.y - g.sunY
+	distanceToSun := math.Sqrt(dx*dx + dy*dy)
+	maxDistance := math.Sqrt(float64(screenWidth*screenWidth + screenHeight*screenHeight))
+	sunlightFactor := math.Max(0, 1-(distanceToSun/maxDistance)) // 1 when close to sun, 0 when far
+
+	// Calculate angle to sun for directional lighting
+	angleToSun := math.Atan2(dy, dx)
+
 	// Draw multiple overlapping circles to create a cloud shape
 	circles := []struct{ dx, dy float64 }{
 		{0, 0},
@@ -396,13 +542,35 @@ func drawCloud(screen *ebiten.Image, cloud Cloud) {
 	}
 
 	for _, c := range circles {
+		// Calculate how lit this part of the cloud is based on its position relative to the sun
+		relativeAngle := math.Atan2(c.dy, c.dx) - angleToSun
+		lightingFactor := 0.7 + 0.3*math.Cos(relativeAngle) // Creates subtle variation based on position relative to sun
+
+		// Calculate base color with slight yellow tint from sun
+		baseR := uint8(255)
+		baseG := uint8(255)
+		baseB := uint8(255)
+
+		// Add yellow tint based on sun proximity
+		yellowTint := uint8(25 * sunlightFactor) // Max yellow tint of 25
+		baseR = uint8(math.Min(float64(baseR+yellowTint), 255))
+		baseG = uint8(math.Min(float64(baseG+yellowTint), 255))
+		baseB = uint8(math.Min(float64(baseB), 255)) // Keep blue unchanged for slight yellow effect
+
+		// Apply lighting factor
+		finalR := uint8(float64(baseR) * lightingFactor)
+		finalG := uint8(float64(baseG) * lightingFactor)
+		finalB := uint8(float64(baseB) * lightingFactor)
+
 		ebitenutil.DrawCircle(
 			screen,
 			cloud.x+c.dx,
 			cloud.y+c.dy,
 			cloud.size*0.3,
 			color.RGBA{
-				255, 255, 255,
+				finalR,
+				finalG,
+				finalB,
 				uint8(cloud.opacity * 255),
 			},
 		)
